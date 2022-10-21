@@ -1,98 +1,71 @@
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
+/* ************************************************************************** */
+/*                                                                            */
+/*                                                        :::      ::::::::   */
+/*   main.c                                             :+:      :+:    :+:   */
+/*                                                    +:+ +:+         +:+     */
+/*   By: agertha <agertha@student.42.fr>            +#+  +:+       +#+        */
+/*                                                +#+#+#+#+#+   +#+           */
+/*   Created: 2022/10/01 16:18:54 by lalex             #+#    #+#             */
+/*   Updated: 2022/10/17 13:26:17 by agertha          ###   ########.fr       */
+/*                                                                            */
+/* ************************************************************************** */
 
-#define PROMPT_STRING	">"
+#include "minishell.h"
 
-
-
-// Helps to work with variables
-// Need API
-typedef struct s_var {
-	char	*key;
-	char	*value;
-	t_var	*next;
-}	t_var;
-
-t_var	*create_var(char *key, char *value);
-// Returns -1 if var with such var->key already at list,
-// otherwise add it to the end and returns 0
-int		append_var(t_var *var, t_var **list);
-t_var	*delete_var(t_var **list, char *key);
-// Return var->value if finds key
-// otherwise returns NULL
-char	*get_var(t_var *list, char *key);
-// Replaces var->value with new_value searching by key.
-// If key not found, returns NULL, otherwise var->value = new_value
-// and old value is returned (it probably should be freed)
-char	*modify_var(t_var *list, char *key, char *new_value);
-
-typedef struct s_shell {
-	char	**env;
-	int		fd_read;
-	t_var	*variables;
-}	t_shell;
-
-/*
-TODO: signal handling, opening file if arguments contain file, ...
-In case of error must clean up and return non-zero value
-*/
-int	init_shell(t_shell *shell, int argc, char **argv, char **env)
+static void	check_args(int argc, char **argv)
 {
-	shell->env = env;
-	shell->fd_read = 0;
-	return (0);
-}
-
-// Clean all unfreed memory, close fds, if needed
-int clear_shell(t_shell *shell);
-
-// Parses line and returns tokens (trimmed spaces, processed quotes, etc.)
-// Tokens: NULL-terminated array of all tokens
-char **split_input(char *line);
-
-//	1. Are there any pipes/redirects?
-//		Yes: open necessary descriptors, prepare forks
-//	2. Divide tokens by pipes/redirects
-//	3. Execute tokens
-//	4. Save exit code of last pipe to $? variable (key = ?)
-// If command was "exit", should return non-zero result 
-// for cycle to be stopped
-int	execute_command(t_shell *shell, char **tokens)
-{
-	return (0);
-}
-
-// Free all of the allocated memory
-void clean_tokens(char **tokens);
-
-// Main logic of Minishell. 
-int shell_operate(t_shell *shell)
-{
-	char	*line;
-	char	**tokens;
-	int		is_exit;
-
-	line = readline(PROMPT_STRING);
-	tokens = split_input(line);
-	free(line);
-	if (tokens == NULL)
+	if (argc > 1)
 	{
-		perror("Something went wrong: ");
-		return (-1);
+		ft_putstr_fd("Myshell 🐚: ", 2);
+		ft_putstr_fd(argv[1], 2);
+		ft_putendl_fd(": No such file or directory", 2);
+		exit(127);
 	}
-	is_exit = execute_commands(shell, tokens);
-	clean_tokens(tokens);
-	return (is_exit);
+}
+
+void	parse_and_execute(t_envp **envp_list, t_com *com, char **split_words)
+{
+	char	*read_str;
+
+	read_str = read_the_line();
+	if (ft_strlen(read_str) > 0)
+	{
+		add_history(read_str);
+		if (!check_syntax(read_str))
+		{
+			replace_dollar(&read_str, *envp_list);
+			split_words = split_by_words(read_str);
+			if (split_words != NULL && split_words[0] != NULL)
+			{
+				if (check_double_delim(split_words))
+					ft_putendl_fd("syntax error near \
+									unexpected token `newline'", 2);
+				make_struct(split_words, &com);
+				if (com)
+					execute(com, envp_list);
+			}
+		}
+		ft_free_com_list(&com);
+		free_array(split_words);
+		free(read_str);
+	}
 }
 
 int	main(int argc, char **argv, char **env)
 {
-	t_shell	shell;
+	char	**split_words;
+	t_envp	*envp_list;
+	t_com	*com;
 
-	if (init_shell(&shell, argc, argv, env))
-		exit(EXIT_FAILURE);
-	while (shell_operate(&shell));
-	clear_shell(&shell);
-	exit(EXIT_SUCCESS);
+	check_args(argc, argv);
+	g_exit_status = 0;
+	split_words = NULL;
+	envp_list = NULL;
+	com = NULL;
+	read_envp(env, &envp_list);
+	signal_handler();
+	while (1)
+		parse_and_execute(&envp_list, com, split_words);
+	rl_clear_history();
+	return (0);
 }
